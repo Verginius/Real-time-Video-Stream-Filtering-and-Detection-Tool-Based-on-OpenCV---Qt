@@ -5,7 +5,6 @@
 #include <QMessageBox>
 #include <QLabel>
 
-// ─────────────────────────────────────────────────────────
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -20,7 +19,6 @@ MainWindow::MainWindow(QWidget *parent)
     ui->grp_threshParams->setEnabled(false);
     ui->grp_detSettings->setEnabled(false);
 
-    // PlayPause / Record 初始文字
     ui->actionPlayPause->setChecked(false);
     ui->actionRecord->setChecked(false);
 }
@@ -30,7 +28,6 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
-// ─────────────────────────────────────────────────────────
 void MainWindow::setupStatusBar()
 {
     m_lblFps        = new QLabel(QStringLiteral("FPS: --"), this);
@@ -74,9 +71,6 @@ void MainWindow::updateAllParamLabels()
         QStringLiteral("NMS 阈值: %1%").arg(ui->sld_nmsThresh->value()));
 }
 
-// ─────────────────────────────────────────────────────────
-// 输入源
-// ─────────────────────────────────────────────────────────
 void MainWindow::on_actionOpenCamera_triggered()
 {
     // TODO: 枚举并打开摄像头
@@ -143,9 +137,6 @@ void MainWindow::on_actionAbout_triggered()
             "<p>版本: 0.1.0</p>"));
 }
 
-// ─────────────────────────────────────────────────────────
-// 视图切换
-// ─────────────────────────────────────────────────────────
 void MainWindow::on_actionShowFilter_triggered(bool checked)
 {
     ui->filterScrollArea->setVisible(checked);
@@ -156,9 +147,6 @@ void MainWindow::on_actionShowDetection_triggered(bool checked)
     ui->detScrollArea->setVisible(checked);
 }
 
-// ─────────────────────────────────────────────────────────
-// 滤镜槽
-// ─────────────────────────────────────────────────────────
 void MainWindow::on_chk_grayscale_toggled(bool /*checked*/)
 {
     // TODO: 通知处理管线
@@ -229,9 +217,6 @@ void MainWindow::on_chk_bgSub_toggled(bool /*checked*/)
     // TODO: 通知处理管线
 }
 
-// ─────────────────────────────────────────────────────────
-// 检测槽
-// ─────────────────────────────────────────────────────────
 void MainWindow::on_chk_detection_toggled(bool checked)
 {
     ui->grp_detSettings->setEnabled(checked);
