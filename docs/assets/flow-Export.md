@@ -9,14 +9,21 @@ classDiagram
         -m_writer VideoWriter
         -m_recording bool
         -m_frameCount size_t
-        -m_mutex mutex
+        -m_droppedFrames atomic~size_t~
         -m_currentPath path
+        -m_queue deque~Mat~
+        -m_queueMutex mutex
+        -m_queueCv condition_variable
+        -m_stopIo atomic~bool~
+        -m_ioThread thread
         +start() bool
         +writeFrame(frame) void
         +stop() path
         +isRecording() bool
         +frameCount() size_t
         +durationSec() double
+        +droppedFrames() size_t
+        -ioThreadFunc() void
         -generateFilename() string
     }
 
@@ -25,6 +32,7 @@ classDiagram
         +prefix string = "record"
         +fourcc int = mp4v
         +fps double = 30.0
+        +maxQueueSize size_t = 8
     }
 
     class ScreenshotSaver {
@@ -66,19 +74,23 @@ stateDiagram-v2
 
     Idle : 未录制\nisRecording = false
 
-    Recording : 录制中\nisRecording = true\ncurrentPath = xxx.mp4
+    Recording : 录制中\nisRecording = true\ncurrentPath = xxx.mp4\nI/O 线程运行中
 
-    Idle --> WaitFirstFrame : start()
-    WaitFirstFrame --> Recording : writeFrame()\n第一帧到来\n→ VideoWriter::open()
-    WaitFirstFrame --> Idle : stop() 提前停止
+    Idle --> WaitFirstFrame : start()\n启动 I/O 线程
+    WaitFirstFrame --> Recording : writeFrame()\n第一帧入队\n→ I/O 线程打开 VideoWriter
+    WaitFirstFrame --> Idle : stop() 提前停止\nI/O 线程退出
 
-    Recording --> Flush : stop()
-    Flush --> Idle : VideoWriter::release()\nemit recordingSaved(path)
+    Recording --> Flush : stop()\n设置 stopIo=true\n等待队列清空
+    Flush --> Idle : I/O 线程 join()\nVideoWriter::release()\nemit recordingSaved(path)
 
-    Recording --> Recording : writeFrame(frame)\n持续写入帧
+    Recording --> Recording : writeFrame(frame)\n非阻塞入队 (< 0.1ms)\n[队列满则丢弃最老帧\n+ droppedFrames++]
 
     state WaitFirstFrame {
         note: 等待第一帧以确定分辨率
+    }
+
+    state Flush {
+        note: 阻塞等待 I/O 线程写完队列中的剩余帧
     }
 ```
 
@@ -92,6 +104,7 @@ sequenceDiagram
     participant MW as MainWindow
     participant VC as VideoController
     participant VR as VideoRecorder
+    participant IOT as I/O 线程 (VR内部)
     participant CVW as cv::VideoWriter
     participant FS as 文件系统
 
@@ -99,24 +112,35 @@ sequenceDiagram
     MW->>VC: emit recordToggleRequested()
     VC->>VR: start()
     VR->>VR: generateFilename()\n→ "record_20260301_143022.mp4"
+    VR->>IOT: 启动 I/O 线程\n(阻塞等待队列非空)
     VR-->>VC: true (准备就绪, 等待第一帧)
     VC->>MW: emit recordingStateChanged(true)
     MW->>MW: actionRecord->setText("停止录制")
 
-    loop 每帧处理
+    loop 每帧处理 (工作线程, ~33ms/帧)
         VC->>VC: doFrameLoop() → processed
         VC->>VR: writeFrame(processed)
-        alt 第一帧
-            VR->>CVW: open(path, fourcc, fps, Size(w,h))
-            CVW->>FS: 创建 .mp4 文件
+        note over VR: 非阻塞入队 < 0.1ms\n[队列满则丢最老帧]
+        VR-->>VC: 立即返回
+
+        alt 队列有帧 (I/O 线程)
+            IOT->>VR: 出队取帧
+            alt 第一帧
+                IOT->>CVW: open(path, fourcc, fps, Size(w,h))
+                CVW->>FS: 创建 .mp4 文件
+            end
+            IOT->>CVW: write(frame)  [约 3~8ms]
+            IOT->>VR: frameCount++
         end
-        VR->>CVW: write(frame)
-        VR->>VR: frameCount++
     end
 
     User->>MW: 再次点击"停止录制"
     MW->>VC: emit recordToggleRequested()
     VC->>VR: stop()
+    VR->>IOT: 设置 stopIo=true\n通知 queueCv
+    VR->>IOT: join() [等待队列 flush]
+    IOT->>CVW: write(剩余帧...)
+    IOT-->>VR: 退出
     VR->>CVW: release() [flush + close]
     CVW->>FS: 完整写出 mp4
     VR-->>VC: path = "record_20260301_143022.mp4"
@@ -192,4 +216,43 @@ graph LR
     VID --> V2["record_20260301_150011.mp4"]
     PIC --> P1["screenshot_20260301_143055_123.png"]
     DOC --> D1["detections_20260301_143022.csv"]
+```
+
+---
+
+## 7. VideoRecorder 内部写队列架构
+
+```mermaid
+flowchart TB
+    subgraph WT["工作线程（QTimer 帧循环）"]
+        A["doFrameLoop()\nprocessed frame"]
+        B["VideoRecorder::writeFrame(frame)\n非阻塞入队 < 0.1ms"]
+        A --> B
+    end
+
+    subgraph VR["VideoRecorder 内部"]
+        Q["有界帧队列\nstd::deque&lt;cv::Mat&gt;\n上限 maxQueueSize = 8 帧\n≈ 96MB @ 1080p"]
+        DROP["droppedFrames++\n丢弃最老帧"]
+        B --> FULL{队列已满?}
+        FULL -->|否| Q
+        FULL -->|是| DROP
+        DROP --> Q
+    end
+
+    subgraph IOT["I/O 线程（VR 内部独立线程）"]
+        C["阻塞等待 queueCv\n出队取帧"]
+        D["cv::VideoWriter::write()\n约 3~8ms / 帧"]
+        Q --> C --> D
+    end
+
+    subgraph STOP["stop() 调用"]
+        E["设置 stopIo = true\n通知 queueCv"]
+        F["join() 等待 I/O 线程\n队列 flush 完毕"]
+        G["VideoWriter::release()"]
+        E --> F --> G
+    end
+
+    style Q fill:#e3f2fd,stroke:#1976d2
+    style DROP fill:#fce4ec,stroke:#c62828
+    style IOT fill:#e8f5e9,stroke:#388e3c
 ```

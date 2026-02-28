@@ -28,7 +28,7 @@
 | 层级 | 技术选型 | 版本要求 |
 |------|----------|----------|
 | UI 框架 | Qt | 6.x（推荐） / 5.15+ |
-| 计算机视觉 | OpenCV | 4.8+ |
+| 计算机视觉 | OpenCV | 4.5.5 |
 | 深度学习推理 | OpenCV DNN / ONNX Runtime | — |
 | 目标检测模型 | YOLOv8 (Ultralytics ONNX 导出) | — |
 | 编程语言 | C++17 | — |
@@ -113,9 +113,9 @@
 └───┬─────────────────────────────────┬───────────────────┘
     │                                 │
 ┌───▼───────────┐           ┌─────────▼──────────┐
-│  VideoSource  │           │  ProcessingPipeline │
-│  - CameraSource│          │  - FilterChain      │
-│  - FileSource │           │  - FilterBase       │
+│  VideoSource  │           │    FilterChain      │
+│  - CameraSource│          │  - FilterBase       │
+│  - FileSource │           │  - GrayscaleFilter  │
 │  - ScreenSource│          │  - GaussianFilter   │
 └───────────────┘           │  - CannyFilter      │
                             │  - ... (可扩展)      │
@@ -126,10 +126,11 @@
                             │  (OpenCV DNN / ONNX)  │
                             └─────────┬────────────┘
                                       │
-                            ┌─────────▼────────────┐
-                            │    VideoWriter        │
-                            │  (录制 / 截图导出)    │
-                            └──────────────────────┘
+                             ┌─────────▼────────────┐
+                             │   VideoRecorder /     │
+                             │   ResultExporter      │
+                             │  (录制/截图/导出)     │
+                             └──────────────────────┘
 ```
 
 ### 4.1 核心类设计
@@ -148,22 +149,54 @@ public:
 class FilterBase {
 public:
     virtual cv::Mat apply(const cv::Mat& src) = 0;
-    virtual std::string name() const = 0;
+    virtual std::string id() const = 0;    // 唯一标识符（序列化/UI 匹配）
+    virtual std::string name() const = 0;  // 人类可读名称
+    bool enabled() const { return m_enabled; }
+    void setEnabled(bool e) { m_enabled = e; }
     virtual ~FilterBase() = default;
+protected:
+    bool m_enabled = true;
 };
 
 // 检测器抽象接口
 class DetectorBase {
 public:
-    virtual std::vector<Detection> detect(const cv::Mat& frame) = 0;
     virtual ~DetectorBase() = default;
+
+    // 加载模型（路径、标签文件路径）
+    virtual bool loadModel(const std::string& modelPath,
+                           const std::string& labelsPath = "") = 0;
+
+    // 对 frame 执行推理，返回检测结果列表
+    virtual std::vector<Detection> detect(const cv::Mat& frame) = 0;
+
+    // 模型是否已加载
+    virtual bool isLoaded() const = 0;
+
+    // 设置置信度阈值（[0,1]）
+    virtual void setConfThreshold(float thresh) = 0;
+    virtual float confThreshold() const = 0;
+
+    // 设置 NMS IOU 阈值
+    virtual void setNmsThreshold(float thresh) = 0;
+    virtual float nmsThreshold() const = 0;
 };
 
 struct Detection {
-    cv::Rect bbox;
+    cv::Rect2f bbox;        // 像素坐标（浮点，保留子像素精度）
     int classId;
     float confidence;
     std::string label;
+};
+
+using DetectionList = std::vector<Detection>;
+
+// 检测结果渲染器：将 Detection 列表叠加绘制到帧上
+class DetectionRenderer {
+public:
+    // 在 frame 上原地绘制所有检测框、标签与置信度
+    void render(cv::Mat& frame, const DetectionList& detections);
+    // 颜色由内部持有的 LabelMap::colorOf(classId) 管理
 };
 ```
 
@@ -184,7 +217,7 @@ project-root/
 │   ├── core/
 │   │   ├── VideoController.h/cpp
 │   │   ├── VideoSource/
-│   │   │   ├── VideoSourceBase.h
+│   │   │   ├── VideoSource.h
 │   │   │   ├── CameraSource.h/cpp
 │   │   │   ├── FileSource.h/cpp
 │   │   │   └── ScreenSource.h/cpp
@@ -199,13 +232,15 @@ project-root/
 │   │   ├── Detection/
 │   │   │   ├── DetectorBase.h
 │   │   │   ├── YOLODetector.h/cpp
-│   │   │   └── Detection.h
+│   │   │   ├── DetectionRenderer.h/cpp
+│   │   │   |── Detection.h
+|   |   |   └── LabelMap.h            
 │   │   └── Export/
-│   │       ├── VideoWriter.h/cpp
-│   │       └── ResultExporter.h/cpp
+│   │       ├── VideoRecorder.h/cpp    # 视频录制
+│   │       └── ResultExporter.h/cpp   # 截图 + CSV/JSON 检测结果导出
 │   └── ui/
-│       ├── MainWindow.h/cpp
-│       ├── MainWindow.ui
+│       ├── mainwindow.h/cpp
+│       ├── mainwindow.ui
 │       ├── FilterPanel.h/cpp
 │       ├── DetectionPanel.h/cpp
 │       └── VideoDisplay.h/cpp
@@ -289,7 +324,7 @@ project-root/
 **目标：** 支持截图与处理后视频录制
 
 - [ ] 实现截图功能（PNG/JPEG 文件名含时间戳）
-- [ ] 实现 VideoWriter（录制处理后帧 + 检测叠加层）
+- [ ] 实现 VideoRecorder（录制处理后帧 + 检测叠加层，内部独立 I/O 线程 + 有界写队列）
 - [ ] 工具栏"录制"按钮，录制状态指示
 - [ ] （可选）检测结果导出为 CSV / JSON
 
@@ -332,7 +367,7 @@ project-root/
 | ONNX Runtime 与 OpenCV DNN 性能差异 | 低 | 低 | 封装统一接口，后期可切换 |
 | Qt6 与 OpenCV Mat 显示性能 | 低 | 高 | 使用 QImage::fromData 零拷贝方式 |
 | YOLO 推理 CPU 负载过高 | 中 | 高 | 实现跳帧推理 + 独立线程 |
-| 多线程竞争（帧队列） | 中 | 高 | 使用有界线程安全队列（环形缓冲） |
+| 多线程竞争（帧循环） | 中 | 高 | 帧循环采用 QTimer 单线程驱动（低延迟优先）；录制 I/O 瓶颈由 VideoRecorder 内部有界写队列 + 独立 I/O 线程解决（工作线程仅做非阻塞入队 < 0.1ms） |
 
 ---
 

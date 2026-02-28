@@ -10,7 +10,7 @@
 ## 1. 模块职责
 
 `VideoController` 是整个数据流的中枢，负责：
-1. 持有并管理 `VideoSourceBase`、`FilterChain`、`YOLODetector`、`VideoRecorder` 等核心对象的生命周期。
+1. 持有并管理 `VideoSource`、`FilterChain`、`YOLODetector`、`VideoRecorder`、`ResultExporter` 等核心对象的生命周期。
 2. 在独立工作线程中驱动帧循环（读帧 → 滤镜处理 → 检测 → 发帧）。
 3. 作为 Qt 信号槽的中间人，将 GUI 的用户意图转为具体操作，并将数据结果回传给 GUI。
 
@@ -22,10 +22,11 @@
 QThread (m_workerThread)
   └── VideoController (QObject, 移入工作线程)
         │
-        ├── VideoSourceBase*      输入帧
+        ├── VideoSource*          输入帧
         ├── FilterChain           滤镜链处理
         ├── YOLODetector          检测推理（内部另开检测线程）
         ├── VideoRecorder         帧录制
+        ├── ResultExporter        截图与结果导出
         ├── QTimer (m_frameTimer) 帧循环驱动
         └── FpsCounter            实时 FPS 统计
 ```
@@ -44,12 +45,12 @@ QThread (m_workerThread)
 #include <memory>
 #include <atomic>
 
-#include "VideoSource/VideoSourceBase.h"
+#include "VideoSource/VideoSource.h"   // VideoSource 纯虚基类
 #include "Filter/FilterChain.h"
 #include "Detection/YOLODetector.h"
 #include "Detection/DetectionRenderer.h"
 #include "Export/VideoRecorder.h"
-#include "Export/ScreenshotSaver.h"
+#include "Export/ResultExporter.h"
 
 class VideoController : public QObject {
     Q_OBJECT
@@ -103,7 +104,8 @@ public slots:
     void onSetSkipFrames(int n);
 
     // 导出
-    void onScreenshot();
+    void onScreenshot();                                 // 触发截图
+    void onExportDetections(const QString& format);       // "csv" / "json"
     void onRecordToggle();
     void onSetRecordOutputDir(const QString& dir);
 
@@ -111,17 +113,18 @@ private slots:
     void doFrameLoop();   // 由 m_frameTimer 触发
 
 private:
-    void openSource(std::unique_ptr<VideoSourceBase> source);
+    void openSource(std::unique_ptr<VideoSource> source);
     void closeSource();
     void startFrameTimer(double fps);
     void stopFrameTimer();
 
     // ──── 核心对象 ────
-    std::unique_ptr<VideoSourceBase> m_source;
-    FilterChain                      m_filterChain;
-    YOLODetector                     m_detector;
-    DetectionRenderer                m_renderer;
-    VideoRecorder                    m_recorder;
+    std::unique_ptr<VideoSource> m_source;
+    FilterChain                  m_filterChain;
+    YOLODetector                 m_detector;
+    DetectionRenderer            m_renderer;
+    VideoRecorder                m_recorder;
+    ResultExporter               m_exporter;
 
     // ──── 帧循环 ────
     QTimer*          m_frameTimer   = nullptr;
@@ -175,7 +178,7 @@ QTimer::timeout (每 1000/fps ms)
     │   else
     │       renderer.render(processed, latestDetections)  ← 复用上次结果
     │
-    ├─ if (recording) recorder.writeFrame(processed)
+    ├─ if (recording) m_recorder.writeFrame(processed)
     │
     ├─ emit frameReady(original, processed, latestDetections)
     │
@@ -272,7 +275,23 @@ void VideoController::startFrameTimer(double fps) {
 
 ---
 
-## 9. 关键性能指标
+## 9. 多线程策略选型说明
+
+> 本设计采用 **QTimer 驱动帧循环**，而非 `project plan.md` 风险对策中提及的**有界环形缓冲队列**方案。两者区别如下：
+
+| 维度 | QTimer 驱动（本设计采用） | 有界环形缓冲队列 |
+|------|--------------------------|------------------|
+| 架构复杂度 | 低：单线程帧循环，无生产者/消费者同步 | 高：需要生产线程、消费线程、锁或无锁队列 |
+| 延迟特性 | 帧生产即消费，端到端延迟极低 | 缓冲区引入额外 1–N 帧延迟 |
+| 背压处理 | 自然背压：上一帧未处理完则下次 timeout 跳过 | 队列满时可选丢帧或阻塞生产者 |
+| 适用场景 | 实时显示优先，允许偶发丢帧 | 高吞吐录制场景，追求帧完整性 |
+| 代码可维护性 | 高：逻辑集中在 `doFrameLoop()` | 较低：需维护线程安全队列及两端生命周期 |
+
+**结论：** 本项目以实时显示为首要目标，且通过跳帧推理已解决检测负载问题，故选择 QTimer 方案。针对无损录制场景（CLAHE + 背景差分同时开启时单帧处理可能超过 33ms），`VideoRecorder` 内部引入**独立 I/O 线程 + 有界写队列（上限 8 帧）**：工作线程仅做非阻塞入队（< 0.1ms），实际编码在 I/O 线程异步完成，队列满时丢弃最老帧并记录 `droppedFrames` 供状态栏告警。这在不改变整体帧循环架构的前提下消除了录制丢帧风险。
+
+---
+
+## 10. 关键性能指标
 
 | 指标 | 目标 |
 |------|-----|

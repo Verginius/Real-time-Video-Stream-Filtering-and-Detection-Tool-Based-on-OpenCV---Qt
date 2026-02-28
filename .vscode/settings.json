@@ -4,5 +4,8 @@
     "cmake.defaultKit": "Qt 6.10.2 MinGW 13.1.0 64-bit",
     "cmake.configureSettings": {
         "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/cmake/toolchain-qt6-mingw64.cmake"
-    }
+    },
+    "cmake.configureEnvironment": {
+        "CMAKE_PREFIX_PATH": "${workspaceFolder}/libs/OpenCV-MinGW-Build-OpenCV-4.5.5-x64/x64/mingw/lib" 
+    },
 }

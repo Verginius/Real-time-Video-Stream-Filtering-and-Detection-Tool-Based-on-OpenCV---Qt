@@ -20,8 +20,7 @@
 
 ```
 VideoRecorder            视频录制器（封装 cv::VideoWriter）
-ScreenshotSaver          截图保存工具（静态方法）
-ResultExporter           检测结果 CSV/JSON 导出器
+ResultExporter           截图保存 + 检测结果 CSV/JSON 导出器
 ```
 
 ---
@@ -36,6 +35,10 @@ ResultExporter           检测结果 CSV/JSON 导出器
 #include <opencv2/videoio.hpp>
 #include <filesystem>
 #include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <deque>
+#include <atomic>
 #include <string>
 
 struct RecordConfig {
@@ -43,6 +46,7 @@ struct RecordConfig {
     std::string           prefix       = "record";
     int                   fourcc       = cv::VideoWriter::fourcc('m','p','4','v');
     double                fps          = 30.0;
+    std::size_t           maxQueueSize = 8;   // 内部写队列上限（帧数）
     // width / height 从第一帧自动获取，无需手动设置
 };
 
@@ -51,99 +55,75 @@ public:
     explicit VideoRecorder(RecordConfig cfg = {});
     ~VideoRecorder();
 
-    // 开始录制（自动生成带时间戳的文件名）
+    // 开始录制（启动内部 I/O 线程，自动生成带时间戳的文件名）
     bool start();
 
-    // 写入一帧（线程安全）
+    // 将帧入队（非阻塞，< 0.1ms；队列满时丢弃最老帧并递增 droppedFrames）
     void writeFrame(const cv::Mat& frame);
 
-    // 停止录制，flush 并关闭文件
-    // 返回最终输出文件路径
+    // 停止录制：等待队列清空后 flush 并关闭文件，返回最终输出路径
     std::filesystem::path stop();
 
     bool isRecording() const;
 
-    // 已录制帧数
+    // 已入队帧数（含已编码 + 队列中待编码）
     std::size_t frameCount() const;
 
-    // 已录制时长（秒）
+    // 已录制时长（秒，按入队帧数估算）
     double durationSec() const;
 
+    // 因队列满而丢弃的帧数（供状态栏显示警告）
+    std::size_t droppedFrames() const;
+
 private:
+    void ioThreadFunc();                      // I/O 线程主函数
     std::string generateFilename() const;
 
     RecordConfig    m_cfg;
     cv::VideoWriter m_writer;
     bool            m_recording  = false;
     std::size_t     m_frameCount = 0;
-    mutable std::mutex m_mutex;
+    std::atomic<std::size_t> m_droppedFrames{0};
     std::filesystem::path m_currentPath;
+
+    // ── 内部写队列 ──────────────────────────────────────
+    std::deque<cv::Mat>      m_queue;         // 有界帧队列（上限 maxQueueSize）
+    mutable std::mutex       m_queueMutex;
+    std::condition_variable  m_queueCv;
+    std::atomic<bool>        m_stopIo{false};
+    std::thread              m_ioThread;      // 独立 I/O 编码线程
 };
 ```
 
 **关键实现要点：**
 
-- `start()` 不立即打开 `cv::VideoWriter`，而是等待第一帧到来后才确定分辨率并调用 `m_writer.open()`。
-- 文件命名格式：`record_20260301_143022.mp4`（使用 `std::chrono` + `<format>` 或 `strftime`）。
-- `writeFrame()` 持有 `m_mutex`，允许工作线程写帧时 UI 线程调用 `stop()`。
+- `start()` 不立即打开 `cv::VideoWriter`，而是启动 `m_ioThread` 并等待第一帧到来后确定分辨率再调用 `m_writer.open()`。
+- `writeFrame()` 持有 `m_queueMutex`，将帧 `.clone()` 后入队，入队后通知 `m_queueCv`；若 `m_queue.size() >= maxQueueSize` 则弹出最老帧并递增 `m_droppedFrames`，保证工作线程不阻塞。
+- `m_ioThread`（`ioThreadFunc()`）持续从队列取帧并调用 `cv::VideoWriter::write()`，阻塞等待 `m_queueCv`，直到 `m_stopIo == true` 且队列为空时退出。
+- `stop()` 设置 `m_stopIo = true` 并通知 `m_queueCv`，随后 `m_ioThread.join()` 等待队列全部 flush 完毕，再调用 `m_writer.release()`，确保最后几帧不丢失。
+- 文件命名格式：`record_20260301_143022.mp4`（使用 `std::chrono` + `strftime`）。
 - 编解码器优先选 `mp4v`（MP4 容器），可通过 `RecordConfig::fourcc` 改为 `XVID`（AVI）。
+- 队列上限默认 8 帧（1080p BGR ≈ 96 MB），可缓冲约 270ms 峰值处理时间，足以应对 CLAHE + 背景差分同时开启的场景。
 
 ---
 
-### 3.2 ScreenshotSaver
-
-```cpp
-// src/core/Export/ScreenshotSaver.h
-#pragma once
-#include <opencv2/core.hpp>
-#include <filesystem>
-#include <string>
-
-class ScreenshotSaver {
-public:
-    enum class Format { PNG, JPEG };
-
-    // 保存帧到指定目录，文件名自动带时间戳
-    // 返回最终保存路径，失败返回空路径
-    static std::filesystem::path save(
-        const cv::Mat& frame,
-        const std::filesystem::path& outputDir,
-        Format fmt      = Format::PNG,
-        int jpegQuality = 95);
-
-    // 保存到指定完整路径
-    static bool saveTo(
-        const cv::Mat& frame,
-        const std::filesystem::path& filePath,
-        int jpegQuality = 95);
-
-private:
-    static std::string generateFilename(Format fmt);
-};
-```
-
-**关键实现要点：**
-
-- `cv::imwrite()` 支持 PNG（无损）和 JPEG（有损），通过 `cv::IMWRITE_JPEG_QUALITY` 控制质量。
-- 文件名格式：`screenshot_20260301_143055_123.png`（精确到毫秒避免重名）。
-- `outputDir` 不存在时自动 `std::filesystem::create_directories()`。
-
----
-
-### 3.3 ResultExporter（P2）
+### 3.2 ResultExporter（截图 + 检测结果导出）
 
 ```cpp
 // src/core/Export/ResultExporter.h
 #pragma once
 #include "core/Detection/Detection.h"
+#include <opencv2/core.hpp>
 #include <filesystem>
 #include <fstream>
 #include <cstdint>
 #include <mutex>
+#include <string>
 
 class ResultExporter {
 public:
     enum class Format { CSV, JSON };
+    enum class ImageFormat { PNG, JPEG };
 
     explicit ResultExporter(std::filesystem::path filePath, Format fmt);
     ~ResultExporter();   // 自动 flush + close
@@ -160,6 +140,20 @@ public:
 
     bool isOpen() const;
 
+    // ── 截图功能（静态方法，不依赖导出文件状态）──────────────
+    // 保存帧到指定目录，文件名自动带时间戳；返回最终路径，失败返回空路径
+    static std::filesystem::path saveScreenshot(
+        const cv::Mat& frame,
+        const std::filesystem::path& outputDir,
+        ImageFormat fmt    = ImageFormat::PNG,
+        int jpegQuality    = 95);
+
+    // 保存到指定完整路径
+    static bool saveScreenshotTo(
+        const cv::Mat& frame,
+        const std::filesystem::path& filePath,
+        int jpegQuality = 95);
+
 private:
     void writeCsvHeader();
     void writeCsvRow(std::int64_t ts, const Detection& d);
@@ -167,6 +161,7 @@ private:
     void writeJsonDetection(const Detection& d, bool last);
     void writeJsonFrameClose();
     void writeJsonFooter();
+    static std::string generateScreenshotFilename(ImageFormat fmt);
 
     std::filesystem::path m_path;
     Format                m_fmt;
@@ -209,8 +204,8 @@ timestamp_ms,frame_id,label,confidence,x,y,w,h
 // VideoController 内部
 class VideoController : public QObject {
     // ...
-    VideoRecorder    m_recorder;
-    ResultExporter*  m_exporter = nullptr;   // 可选，P2
+    VideoRecorder                    m_recorder;
+    std::unique_ptr<ResultExporter>  m_exporter;   // 可选，P2；按需构造
 
 public slots:
     void onRecordToggle() {
@@ -225,7 +220,7 @@ public slots:
     }
 
     void onScreenshot() {
-        auto path = ScreenshotSaver::save(
+        auto path = ResultExporter::saveScreenshot(
             m_lastProcessedFrame,
             QStandardPaths::writableLocation(
                 QStandardPaths::PicturesLocation).toStdString());
@@ -262,12 +257,21 @@ private:
 ## 6. 单元测试要点
 
 ```cpp
-TEST(VideoRecorderTest, StartStop)      { /* start→写10帧→stop，文件存在且非空 */ }
-TEST(VideoRecorderTest, FrameCount)     { /* 写 N 帧后 frameCount()==N */ }
-TEST(ScreenshotSaverTest, SavePNG)      { /* 保存后文件存在，cv::imread 可读 */ }
-TEST(ScreenshotSaverTest, SaveJPEG)     { /* JPEG 文件大小 < PNG */ }
-TEST(ResultExporterTest, CsvHeader)     { /* 第一行含 "timestamp_ms" */ }
-TEST(ResultExporterTest, JsonValid)     { /* 输出可被 JSON 解析器解析 */ }
+TEST(VideoRecorderTest, StartStop)        { /* start→写10帧→stop，文件存在且非空 */ }
+TEST(VideoRecorderTest, FrameCount)       { /* 写 N 帧后 frameCount()==N */ }
+TEST(VideoRecorderTest, WriteFrameNonBlocking) {
+    /* writeFrame 在 I/O 线程忙时仍立即返回（< 1ms） */
+}
+TEST(VideoRecorderTest, QueueFullDropsOldest) {
+    /* 写入超过 maxQueueSize 帧时 droppedFrames 递增，且工作线程不阻塞 */
+}
+TEST(VideoRecorderTest, StopFlushesQueue) {
+    /* stop() 后文件帧数 == frameCount() - droppedFrames() */
+}
+TEST(ResultExporterTest, SaveScreenshotPNG)  { /* 保存后文件存在，cv::imread 可读 */ }
+TEST(ResultExporterTest, SaveScreenshotJPEG) { /* JPEG 文件大小 < PNG */ }
+TEST(ResultExporterTest, CsvHeader)       { /* 第一行含 "timestamp_ms" */ }
+TEST(ResultExporterTest, JsonValid)       { /* 输出可被 JSON 解析器解析 */ }
 ```
 
 ---
@@ -276,7 +280,9 @@ TEST(ResultExporterTest, JsonValid)     { /* 输出可被 JSON 解析器解析 *
 
 | 指标 | 目标 |
 |------|-----|
-| `VideoRecorder::writeFrame()` 耗时（1080p） | < 5 ms（含编码） |
-| 录制对主循环帧率影响 | < 1 FPS 损耗 |
+| `VideoRecorder::writeFrame()` 耗时（工作线程侧，入队） | < 0.1 ms |
+| 实际编码耗时（I/O 线程，1080p mp4v） | < 8 ms / 帧 |
+| 录制对主循环帧率影响 | < 0.5 FPS 损耗（入队几乎无阻塞） |
+| 写队列内存占用（上限 8 帧，1080p BGR） | ≈ 96 MB |
 | 截图保存耗时（1080p PNG） | < 50 ms（允许异步） |
 | CSV 追加一行耗时 | < 0.1 ms |

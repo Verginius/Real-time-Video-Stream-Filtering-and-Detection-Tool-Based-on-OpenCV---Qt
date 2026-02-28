@@ -4,7 +4,7 @@
 
 ```mermaid
 classDiagram
-    class VideoSourceBase {
+    class VideoSource {
         <<abstract>>
         +open() bool*
         +read(frame Mat&) bool*
@@ -63,9 +63,9 @@ classDiagram
         +name string
     }
 
-    VideoSourceBase <|-- CameraSource
-    VideoSourceBase <|-- FileSource
-    VideoSourceBase <|-- ScreenSource
+    VideoSource <|-- CameraSource
+    VideoSource <|-- FileSource
+    VideoSource <|-- ScreenSource
     CameraSource ..> CameraInfo : enumerates
 ```
 

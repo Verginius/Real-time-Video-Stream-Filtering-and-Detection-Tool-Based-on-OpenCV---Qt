@@ -16,7 +16,7 @@
 ## 2. 类结构
 
 ```
-VideoSourceBase          (纯虚抽象基类)
+VideoSource              (纯虚抽象基类)
 ├── CameraSource         摄像头输入
 ├── FileSource           本地视频文件
 └── ScreenSource         屏幕区域捕获
@@ -26,17 +26,17 @@ VideoSourceBase          (纯虚抽象基类)
 
 ## 3. 接口定义
 
-### 3.1 VideoSourceBase
+### 3.1 VideoSource
 
 ```cpp
-// src/core/VideoSource/VideoSourceBase.h
+// src/core/VideoSource/VideoSource.h
 #pragma once
 #include <opencv2/core.hpp>
 #include <string>
 
-class VideoSourceBase {
+class VideoSource {
 public:
-    virtual ~VideoSourceBase() = default;
+    virtual ~VideoSource() = default;
 
     // 打开输入源；失败返回 false
     virtual bool open() = 0;
@@ -78,7 +78,7 @@ public:
 ```cpp
 // src/core/VideoSource/CameraSource.h
 #pragma once
-#include "VideoSourceBase.h"
+#include "VideoSource.h"
 #include <opencv2/videoio.hpp>
 #include <vector>
 
@@ -87,7 +87,7 @@ struct CameraInfo {
     std::string name;   // 设备名称（平台相关）
 };
 
-class CameraSource : public VideoSourceBase {
+class CameraSource : public VideoSource {
 public:
     // 枚举当前系统可用摄像头（最多探测 maxProbe 个索引）
     static std::vector<CameraInfo> enumerateDevices(int maxProbe = 8);
@@ -130,11 +130,11 @@ private:
 ```cpp
 // src/core/VideoSource/FileSource.h
 #pragma once
-#include "VideoSourceBase.h"
+#include "VideoSource.h"
 #include <opencv2/videoio.hpp>
 #include <filesystem>
 
-class FileSource : public VideoSourceBase {
+class FileSource : public VideoSource {
 public:
     explicit FileSource(std::filesystem::path filePath);
 
@@ -181,11 +181,11 @@ private:
 ```cpp
 // src/core/VideoSource/ScreenSource.h
 #pragma once
-#include "VideoSourceBase.h"
+#include "VideoSource.h"
 #include <QRect>
 #include <QImage>
 
-class ScreenSource : public VideoSourceBase {
+class ScreenSource : public VideoSource {
 public:
     // region: 屏幕坐标矩形；fps: 期望捕获帧率
     explicit ScreenSource(QRect region, double fps = 30.0);
@@ -221,12 +221,12 @@ private:
 
 ```
 VideoController (主循环线程)
-  └─ 定时器（QTimer / 线程睡眠）
-       └─ VideoSourceBase::read(frame)  ← 阻塞调用（< 1 帧时间）
-            └─ 发射 frameReady(frame) 到处理管道
+   └─ 定时器（QTimer / 线程睡眠）
+        └─ VideoSource::read(frame)  ← 阻塞调用（< 1 帧时间）
+             └─ 发射 frameReady(frame) 到处理管道
 ```
 
-`VideoSourceBase` 本身**不持有线程**，由 `VideoController` 在工作线程中驱动读帧，通过 Qt 信号槽将帧传递给处理管道。
+`VideoSource` 本身**不持有线程**，由 `VideoController` 在工作线程中驱动读帧，通过 Qt 信号槽将帧传递给处理管道。
 
 ---
 

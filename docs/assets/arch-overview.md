@@ -20,7 +20,7 @@ graph TB
     end
 
     subgraph SRC["Video Source"]
-        VS["VideoSourceBase"]
+        VS["VideoSource"]
         CS["CameraSource"]
         FS["FileSource"]
         SS["ScreenSource"]
@@ -51,8 +51,7 @@ graph TB
 
     subgraph EXP["Export"]
         VR["VideoRecorder\n(cv::VideoWriter)"]
-        SS2["ScreenshotSaver\n(cv::imwrite)"]
-        RE["ResultExporter\n(CSV / JSON)"]
+        RE["ResultExporter\n(CSV / JSON / 截图)"]
     end
 
     MW -- "signals/slots\nQueuedConnection" --> VC
@@ -61,7 +60,6 @@ graph TB
     VC --> FC
     VC --> YD
     VC --> VR
-    VC --> SS2
     VC --> RE
 ```
 
@@ -87,7 +85,7 @@ flowchart LR
     PROC2 --> |clone| GUI_PROC["lbl_processedVideo"]
     PROC2 --> RECORDER["VideoRecorder\n::writeFrame()"]
     DETS --> TABLE["检测结果表格"]
-    PROC2 --> SCREENSHOT["ScreenshotSaver\n::save()"]
+    PROC2 --> SCREENSHOT["ResultExporter\n::saveScreenshot()"]
     DETS --> EXPORTER["ResultExporter\n::appendFrame()"]
 ```
 

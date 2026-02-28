@@ -36,7 +36,7 @@ LabelMap                 类别 ID ↔ 名称映射（COCO / 自定义）
 #include <vector>
 
 struct Detection {
-    cv::Rect2f bbox;        // 归一化坐标 [0,1] 的边界框
+    cv::Rect2f bbox;        // 像素坐标（浮点，保留子像素精度）
     int        classId;     // 类别 ID（COCO 0~79）
     float      confidence;  // 置信度 [0,1]
     std::string label;      // 类别名称字符串
