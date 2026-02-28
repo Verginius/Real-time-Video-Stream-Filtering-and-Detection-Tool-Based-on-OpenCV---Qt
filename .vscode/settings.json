@@ -1,0 +1,8 @@
+{
+    "C_Cpp.errorSquiggles": "enabled",
+    "cmake.kitsFile": "${workspaceFolder}/.vscode/cmake-kits.json",
+    "cmake.defaultKit": "Qt 6.10.2 MinGW 13.1.0 64-bit",
+    "cmake.configureSettings": {
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/cmake/toolchain-qt6-mingw64.cmake"
+    }
+}

@@ -1,0 +1,19 @@
+[
+    {
+        "name": "Qt 6.10.2 MinGW 13.1.0 64-bit",
+        "compilers": {
+            "C":   "D:/Qt/Tools/mingw1310_64/bin/gcc.exe",
+            "CXX": "D:/Qt/Tools/mingw1310_64/bin/g++.exe"
+        },
+        "toolchainFile": "${workspaceFolder}/cmake/toolchain-qt6-mingw64.cmake",
+        "preferredGenerator": {
+            "name": "MinGW Makefiles"
+        },
+        "environmentVariables": {
+            "PATH": "D:/Qt/6.10.2/mingw_64/bin;D:/Qt/Tools/mingw1310_64/bin;${env:PATH}"
+        },
+        "cmakeSettings": {
+            "CMAKE_BUILD_TYPE": "Debug"
+        }
+    }
+]

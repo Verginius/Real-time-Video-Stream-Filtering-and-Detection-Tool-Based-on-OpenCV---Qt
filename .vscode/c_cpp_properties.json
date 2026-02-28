@@ -1,0 +1,29 @@
+﻿{
+    "configurations": [
+        {
+            "name": "Win32",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/src/ui",
+                "${workspaceFolder}/build/RVSFDT_autogen/include",
+                "D:/Qt/6.10.2/mingw_64/include",
+                "D:/Qt/6.10.2/mingw_64/include/QtCore",
+                "D:/Qt/6.10.2/mingw_64/include/QtGui",
+                "D:/Qt/6.10.2/mingw_64/include/QtWidgets"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "D:/Qt/Tools/mingw1310_64/bin/g++.exe",
+            "windowsSdkVersion": "10.0.26100.0",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
