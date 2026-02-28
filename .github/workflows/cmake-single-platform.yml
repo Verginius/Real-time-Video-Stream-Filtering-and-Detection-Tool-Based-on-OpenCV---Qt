@@ -1,4 +1,4 @@
-# CI workflow for RVSFDT: Qt6 + MinGW 13.1.0 + OpenCV 4.5.5 (bundled) on Windows
+# CI workflow for RVSFDT: Qt 6 + MinGW 13.1.0 + OpenCV 4.5.5 (prebuilt) on Windows
 name: CMake Build (Qt6 + MinGW + OpenCV)
 
 on:
@@ -10,6 +10,10 @@ on:
 env:
   BUILD_TYPE: Release
   QT_VERSION: '6.10.2'
+  OPENCV_VERSION: '4.5.5'
+  OPENCV_DIR: OpenCV-MinGW-Build-OpenCV-4.5.5-x64
+  OPENCV_RELEASE_TAG: 'OpenCV-4.5.5-x64-mingw'
+  OPENCV_RELEASE_URL: 'https://github.com/huihut/OpenCV-MinGW-Build/archive/refs/tags/OpenCV-4.5.5-x64-mingw.zip'
 
 jobs:
   build:
@@ -17,7 +21,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - name: Install Qt6 with MinGW 13.1.0
       uses: jurplel/install-qt-action@v4
       with:
@@ -28,15 +31,51 @@ jobs:
         tools: 'tools_mingw1310'
         cache: true
 
+    - name: Cache OpenCV prebuilt
+      id: cache-opencv
+      uses: actions/cache@v4
+      with:
+        path: libs/${{ env.OPENCV_DIR }}
+        key: opencv-${{ env.OPENCV_VERSION }}-mingw-x64
+
+    - name: Download & extract OpenCV MinGW prebuilt
+      if: steps.cache-opencv.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path libs | Out-Null
+        Invoke-WebRequest -Uri "${{ env.OPENCV_RELEASE_URL }}" -OutFile opencv.zip
+        Expand-Archive -Path opencv.zip -DestinationPath libs_tmp
+        # 将解压出的目录重命名为统一名称
+        $extracted = Get-ChildItem libs_tmp | Select-Object -First 1
+        Move-Item $extracted.FullName "libs/${{ env.OPENCV_DIR }}"
+        Remove-Item opencv.zip
+        Remove-Item -Recurse libs_tmp
+
     - name: Configure CMake
-      run: >
-        cmake -B "${{ github.workspace }}/build"
-        -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-        -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}"
-        -DCMAKE_C_COMPILER="${{ env.IQTA_TOOLS }}/mingw1310_64/bin/gcc.exe"
-        -DCMAKE_CXX_COMPILER="${{ env.IQTA_TOOLS }}/mingw1310_64/bin/g++.exe"
-        -DCMAKE_RC_COMPILER="${{ env.IQTA_TOOLS }}/mingw1310_64/bin/windres.exe"
+      shell: pwsh
+      run: |
+        $qtRoot  = $env:QT_ROOT_DIR
+        $mingwBin = "$($env:IQTA_TOOLS)/mingw1310_64/bin"
+        Write-Host "Qt root : $qtRoot"
+        Write-Host "MinGW   : $mingwBin"
+        cmake -B "${{ github.workspace }}/build" `
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+          -DCMAKE_PREFIX_PATH="$qtRoot" `
+          -DCMAKE_C_COMPILER="$mingwBin/gcc.exe" `
+          -DCMAKE_CXX_COMPILER="$mingwBin/g++.exe" `
+          -DCMAKE_RC_COMPILER="$mingwBin/windres.exe" `
+          -DOpenCV_DIR="${{ github.workspace }}/libs/${{ env.OPENCV_DIR }}" `
+          -G "MinGW Makefiles"
 
     - name: Build
       run: cmake --build "${{ github.workspace }}/build" --config ${{ env.BUILD_TYPE }} --parallel
+
+    - name: Upload executable artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: RVSFDT-windows-${{ env.BUILD_TYPE }}
+        path: |
+          build/RVSFDT.exe
+        retention-days: 7
 
