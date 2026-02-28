@@ -50,6 +50,7 @@ set(PROJECT_SOURCES
     # 目标检测
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/Detection.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/DetectorBase.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/LabelMap.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/YOLODetector.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/YOLODetector.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/Detection/DetectionRenderer.h
@@ -102,6 +103,7 @@ endif()
 
 target_include_directories(RVSFDT PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
     ${OpenCV_INCLUDE_DIRS}
 )

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <QRect>
 #include <memory>
 #include <atomic>
 
