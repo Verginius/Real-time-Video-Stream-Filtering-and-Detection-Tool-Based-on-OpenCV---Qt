@@ -6,26 +6,645 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1400</width>
+    <height>900</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>实时视频流滤镜与检测工具 v0.1</string>
   </property>
-  <widget class="QWidget" name="centralwidget"/>
+
+  <!-- ==================== Central Widget ==================== -->
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainHLayout" stretch="0,1,0">
+    <property name="spacing"><number>6</number></property>
+    <property name="leftMargin"><number>4</number></property>
+    <property name="topMargin"><number>4</number></property>
+    <property name="rightMargin"><number>4</number></property>
+    <property name="bottomMargin"><number>4</number></property>
+
+    <!-- ===== LEFT: Filter Panel ===== -->
+    <item>
+     <widget class="QScrollArea" name="filterScrollArea">
+      <property name="minimumSize"><size><width>255</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>255</width><height>16777215</height></size></property>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <widget class="QWidget" name="filterScrollContents">
+       <property name="geometry"><rect><x>0</x><y>0</y><width>253</width><height>820</height></rect></property>
+       <layout class="QVBoxLayout" name="filterVLayout">
+        <property name="spacing"><number>4</number></property>
+        <property name="leftMargin"><number>6</number></property>
+        <property name="topMargin"><number>6</number></property>
+        <property name="rightMargin"><number>6</number></property>
+        <property name="bottomMargin"><number>6</number></property>
+
+        <!-- Title -->
+        <item>
+         <widget class="QLabel" name="lbl_filterTitle">
+          <property name="text"><string>图像滤镜</string></property>
+          <property name="styleSheet"><string>font-weight: bold; font-size: 13px;</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="sepFilter0">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- Grayscale -->
+        <item>
+         <widget class="QCheckBox" name="chk_grayscale">
+          <property name="text"><string>灰度化</string></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QFrame" name="sepFilter1">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- Gaussian Blur -->
+        <item>
+         <widget class="QCheckBox" name="chk_gaussBlur">
+          <property name="text"><string>高斯模糊</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grp_gaussParams">
+          <property name="title"><string/></property>
+          <property name="flat"><bool>true</bool></property>
+          <property name="enabled"><bool>false</bool></property>
+          <layout class="QVBoxLayout" name="gaussParamsVLayout">
+           <property name="spacing"><number>3</number></property>
+           <property name="leftMargin"><number>10</number></property>
+           <property name="topMargin"><number>2</number></property>
+           <property name="rightMargin"><number>2</number></property>
+           <property name="bottomMargin"><number>2</number></property>
+           <item>
+            <widget class="QLabel" name="lbl_gaussKernelVal">
+             <property name="text"><string>核大小: 5</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_gaussKernel">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>1</number></property>
+             <property name="maximum"><number>15</number></property>
+             <property name="value"><number>2</number></property>
+             <property name="singleStep"><number>1</number></property>
+             <property name="tickPosition"><enum>QSlider::TicksBelow</enum></property>
+             <property name="tickInterval"><number>3</number></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_gaussSigmaVal">
+             <property name="text"><string>Sigma: 1.0</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_gaussSigma">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>50</number></property>
+             <property name="value"><number>10</number></property>
+             <property name="singleStep"><number>1</number></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QFrame" name="sepFilter2">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- Canny Edge -->
+        <item>
+         <widget class="QCheckBox" name="chk_canny">
+          <property name="text"><string>Canny 边缘检测</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grp_cannyParams">
+          <property name="title"><string/></property>
+          <property name="flat"><bool>true</bool></property>
+          <property name="enabled"><bool>false</bool></property>
+          <layout class="QVBoxLayout" name="cannyParamsVLayout">
+           <property name="spacing"><number>3</number></property>
+           <property name="leftMargin"><number>10</number></property>
+           <property name="topMargin"><number>2</number></property>
+           <property name="rightMargin"><number>2</number></property>
+           <property name="bottomMargin"><number>2</number></property>
+           <item>
+            <widget class="QLabel" name="lbl_cannyThresh1Val">
+             <property name="text"><string>阈值 1: 50</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_cannyThresh1">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>300</number></property>
+             <property name="value"><number>50</number></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_cannyThresh2Val">
+             <property name="text"><string>阈值 2: 150</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_cannyThresh2">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>300</number></property>
+             <property name="value"><number>150</number></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QFrame" name="sepFilter3">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- Threshold -->
+        <item>
+         <widget class="QCheckBox" name="chk_threshold">
+          <property name="text"><string>二值化</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grp_threshParams">
+          <property name="title"><string/></property>
+          <property name="flat"><bool>true</bool></property>
+          <property name="enabled"><bool>false</bool></property>
+          <layout class="QVBoxLayout" name="threshParamsVLayout">
+           <property name="spacing"><number>3</number></property>
+           <property name="leftMargin"><number>10</number></property>
+           <property name="topMargin"><number>2</number></property>
+           <property name="rightMargin"><number>2</number></property>
+           <property name="bottomMargin"><number>2</number></property>
+           <item>
+            <widget class="QComboBox" name="cmb_threshType">
+             <item><property name="text"><string>固定阈值</string></property></item>
+             <item><property name="text"><string>自适应阈值</string></property></item>
+             <item><property name="text"><string>Otsu</string></property></item>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="lbl_threshValueVal">
+             <property name="text"><string>阈值: 127</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_threshValue">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>0</number></property>
+             <property name="maximum"><number>255</number></property>
+             <property name="value"><number>127</number></property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QFrame" name="sepFilter4">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- CLAHE -->
+        <item>
+         <widget class="QCheckBox" name="chk_clahe">
+          <property name="text"><string>CLAHE 均衡化</string></property>
+         </widget>
+        </item>
+
+        <!-- Sharpen -->
+        <item>
+         <widget class="QCheckBox" name="chk_sharpen">
+          <property name="text"><string>锐化</string></property>
+         </widget>
+        </item>
+
+        <!-- Background Subtraction -->
+        <item>
+         <widget class="QCheckBox" name="chk_bgSub">
+          <property name="text"><string>背景差分</string></property>
+         </widget>
+        </item>
+
+        <!-- Spacer -->
+        <item>
+         <spacer name="filterSpacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+         </spacer>
+        </item>
+
+       </layout>
+      </widget>
+     </widget>
+    </item><!-- end filterScrollArea -->
+
+    <!-- ===== CENTER: Video Displays + Detection Table ===== -->
+    <item>
+     <widget class="QWidget" name="centerWidget">
+      <layout class="QVBoxLayout" name="centerVLayout" stretch="3,1">
+       <property name="spacing"><number>6</number></property>
+       <property name="leftMargin"><number>0</number></property>
+       <property name="topMargin"><number>0</number></property>
+       <property name="rightMargin"><number>0</number></property>
+       <property name="bottomMargin"><number>0</number></property>
+
+       <!-- Dual video display -->
+       <item>
+        <widget class="QWidget" name="videoWidget">
+         <layout class="QHBoxLayout" name="videoHLayout">
+          <property name="spacing"><number>6</number></property>
+          <property name="leftMargin"><number>0</number></property>
+          <property name="topMargin"><number>0</number></property>
+          <property name="rightMargin"><number>0</number></property>
+          <property name="bottomMargin"><number>0</number></property>
+
+          <!-- Original Video -->
+          <item>
+           <widget class="QGroupBox" name="grp_originalVideo">
+            <property name="title"><string>原始视频</string></property>
+            <layout class="QVBoxLayout" name="origVideoVLayout">
+             <property name="spacing"><number>0</number></property>
+             <property name="leftMargin"><number>2</number></property>
+             <property name="topMargin"><number>18</number></property>
+             <property name="rightMargin"><number>2</number></property>
+             <property name="bottomMargin"><number>2</number></property>
+             <item>
+              <widget class="QLabel" name="lbl_originalVideo">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>0</horstretch><verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize"><size><width>320</width><height>240</height></size></property>
+               <property name="styleSheet">
+                <string>background-color: #111111; color: #555555; border: 1px solid #2a2a2a; font-size: 14px;</string>
+               </property>
+               <property name="text"><string>无信号</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="scaledContents"><bool>false</bool></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+          <!-- Processed Video -->
+          <item>
+           <widget class="QGroupBox" name="grp_processedVideo">
+            <property name="title"><string>处理后视频</string></property>
+            <layout class="QVBoxLayout" name="procVideoVLayout">
+             <property name="spacing"><number>0</number></property>
+             <property name="leftMargin"><number>2</number></property>
+             <property name="topMargin"><number>18</number></property>
+             <property name="rightMargin"><number>2</number></property>
+             <property name="bottomMargin"><number>2</number></property>
+             <item>
+              <widget class="QLabel" name="lbl_processedVideo">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                 <horstretch>0</horstretch><verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize"><size><width>320</width><height>240</height></size></property>
+               <property name="styleSheet">
+                <string>background-color: #111111; color: #555555; border: 1px solid #2a2a2a; font-size: 14px;</string>
+               </property>
+               <property name="text"><string>无信号</string></property>
+               <property name="alignment"><set>Qt::AlignCenter</set></property>
+               <property name="scaledContents"><bool>false</bool></property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+
+         </layout>
+        </widget>
+       </item><!-- end videoWidget -->
+
+       <!-- Detection Results Table -->
+       <item>
+        <widget class="QGroupBox" name="grp_detResults">
+         <property name="title"><string>检测结果</string></property>
+         <layout class="QVBoxLayout" name="detResultsVLayout">
+          <property name="spacing"><number>2</number></property>
+          <property name="leftMargin"><number>4</number></property>
+          <property name="topMargin"><number>18</number></property>
+          <property name="rightMargin"><number>4</number></property>
+          <property name="bottomMargin"><number>4</number></property>
+          <item>
+           <widget class="QTableWidget" name="tbl_detectionResults">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+              <horstretch>0</horstretch><verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize"><size><width>0</width><height>100</height></size></property>
+            <property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property>
+            <property name="alternatingRowColors"><bool>true</bool></property>
+            <property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property>
+            <property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property>
+            <property name="showGrid"><bool>true</bool></property>
+            <property name="sortingEnabled"><bool>true</bool></property>
+            <property name="columnCount"><number>4</number></property>
+            <attribute name="horizontalHeaderStretchLastSection"><bool>true</bool></attribute>
+            <attribute name="verticalHeaderVisible"><bool>false</bool></attribute>
+            <column><property name="text"><string>类别</string></property></column>
+            <column><property name="text"><string>置信度</string></property></column>
+            <column><property name="text"><string>位置 (x, y)</string></property></column>
+            <column><property name="text"><string>大小 (w × h)</string></property></column>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item><!-- end grp_detResults -->
+
+      </layout>
+     </widget>
+    </item><!-- end centerWidget -->
+
+    <!-- ===== RIGHT: Detection Settings Panel ===== -->
+    <item>
+     <widget class="QScrollArea" name="detScrollArea">
+      <property name="minimumSize"><size><width>240</width><height>0</height></size></property>
+      <property name="maximumSize"><size><width>240</width><height>16777215</height></size></property>
+      <property name="widgetResizable"><bool>true</bool></property>
+      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
+      <widget class="QWidget" name="detScrollContents">
+       <property name="geometry"><rect><x>0</x><y>0</y><width>238</width><height>820</height></rect></property>
+       <layout class="QVBoxLayout" name="detVLayout">
+        <property name="spacing"><number>4</number></property>
+        <property name="leftMargin"><number>6</number></property>
+        <property name="topMargin"><number>6</number></property>
+        <property name="rightMargin"><number>6</number></property>
+        <property name="bottomMargin"><number>6</number></property>
+
+        <!-- Title -->
+        <item>
+         <widget class="QLabel" name="lbl_detTitle">
+          <property name="text"><string>目标检测</string></property>
+          <property name="styleSheet"><string>font-weight: bold; font-size: 13px;</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="sepDet0">
+          <property name="frameShape"><enum>QFrame::HLine</enum></property>
+          <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+         </widget>
+        </item>
+
+        <!-- Enable Detection -->
+        <item>
+         <widget class="QCheckBox" name="chk_detection">
+          <property name="text"><string>启用目标检测</string></property>
+         </widget>
+        </item>
+
+        <!-- Detection Parameters -->
+        <item>
+         <widget class="QGroupBox" name="grp_detSettings">
+          <property name="title"><string>模型设置</string></property>
+          <property name="enabled"><bool>false</bool></property>
+          <layout class="QVBoxLayout" name="detSettingsVLayout">
+           <property name="spacing"><number>4</number></property>
+           <property name="leftMargin"><number>6</number></property>
+           <property name="topMargin"><number>14</number></property>
+           <property name="rightMargin"><number>6</number></property>
+           <property name="bottomMargin"><number>6</number></property>
+
+           <!-- Model path row -->
+           <item>
+            <widget class="QLabel" name="lbl_modelPathTitle">
+             <property name="text"><string>ONNX 模型:</string></property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="modelPathHLayout">
+             <property name="spacing"><number>3</number></property>
+             <item>
+              <widget class="QLineEdit" name="edt_modelPath">
+               <property name="placeholderText"><string>模型路径 (.onnx)</string></property>
+               <property name="readOnly"><bool>true</bool></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_loadModel">
+               <property name="text"><string>...</string></property>
+               <property name="maximumSize"><size><width>30</width><height>16777215</height></size></property>
+               <property name="toolTip"><string>加载 ONNX 模型文件</string></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+
+           <item>
+            <widget class="QFrame" name="sepDet1">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Confidence threshold -->
+           <item>
+            <widget class="QLabel" name="lbl_confThreshVal">
+             <property name="text"><string>置信度阈值: 50%</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_confThresh">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>1</number></property>
+             <property name="maximum"><number>99</number></property>
+             <property name="value"><number>50</number></property>
+            </widget>
+           </item>
+
+           <!-- NMS threshold -->
+           <item>
+            <widget class="QLabel" name="lbl_nmsThreshVal">
+             <property name="text"><string>NMS 阈值: 45%</string></property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="sld_nmsThresh">
+             <property name="orientation"><enum>Qt::Horizontal</enum></property>
+             <property name="minimum"><number>1</number></property>
+             <property name="maximum"><number>99</number></property>
+             <property name="value"><number>45</number></property>
+            </widget>
+           </item>
+
+           <item>
+            <widget class="QFrame" name="sepDet2">
+             <property name="frameShape"><enum>QFrame::HLine</enum></property>
+             <property name="frameShadow"><enum>QFrame::Sunken</enum></property>
+            </widget>
+           </item>
+
+           <!-- Skip frames -->
+           <item>
+            <layout class="QHBoxLayout" name="skipFramesHLayout">
+             <item>
+              <widget class="QLabel" name="lbl_skipFrames">
+               <property name="text"><string>跳帧推理:</string></property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="spn_skipFrames">
+               <property name="toolTip"><string>每隔 N 帧执行一次推理</string></property>
+               <property name="minimum"><number>1</number></property>
+               <property name="maximum"><number>30</number></property>
+               <property name="value"><number>3</number></property>
+               <property name="suffix"><string> 帧</string></property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+
+          </layout>
+         </widget>
+        </item><!-- end grp_detSettings -->
+
+        <!-- Spacer -->
+        <item>
+         <spacer name="detSpacer">
+          <property name="orientation"><enum>Qt::Vertical</enum></property>
+          <property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property>
+         </spacer>
+        </item>
+
+       </layout>
+      </widget>
+     </widget>
+    </item><!-- end detScrollArea -->
+
+   </layout>
+  </widget><!-- end centralwidget -->
+
+  <!-- ==================== Menu Bar ==================== -->
   <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>800</width>
-     <height>21</height>
-    </rect>
-   </property>
+   <property name="geometry"><rect><x>0</x><y>0</y><width>1400</width><height>22</height></rect></property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title"><string>文件(&amp;F)</string></property>
+    <addaction name="actionOpenCamera"/>
+    <addaction name="actionOpenFile"/>
+    <addaction name="actionOpenScreen"/>
+    <addaction name="separator"/>
+    <addaction name="actionExit"/>
+   </widget>
+   <widget class="QMenu" name="menuView">
+    <property name="title"><string>视图(&amp;V)</string></property>
+    <addaction name="actionShowFilter"/>
+    <addaction name="actionShowDetection"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title"><string>帮助(&amp;H)</string></property>
+    <addaction name="actionAbout"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
   </widget>
+
+  <!-- ==================== Tool Bar ==================== -->
+  <widget class="QToolBar" name="mainToolBar">
+   <property name="windowTitle"><string>工具栏</string></property>
+   <attribute name="toolBarArea"><enum>TopToolBarArea</enum></attribute>
+   <attribute name="toolBarBreak"><bool>false</bool></attribute>
+   <addaction name="actionOpenCamera"/>
+   <addaction name="actionOpenFile"/>
+   <addaction name="actionOpenScreen"/>
+   <addaction name="separator"/>
+   <addaction name="actionPlayPause"/>
+   <addaction name="actionStop"/>
+   <addaction name="separator"/>
+   <addaction name="actionScreenshot"/>
+   <addaction name="actionRecord"/>
+  </widget>
+
+  <!-- ==================== Status Bar ==================== -->
   <widget class="QStatusBar" name="statusbar"/>
- </widget>
+
+  <!-- ==================== Actions ==================== -->
+  <action name="actionOpenCamera">
+   <property name="text"><string>打开摄像头</string></property>
+   <property name="toolTip"><string>打开本地摄像头 (Ctrl+D)</string></property>
+   <property name="shortcut"><string>Ctrl+D</string></property>
+  </action>
+  <action name="actionOpenFile">
+   <property name="text"><string>打开视频文件...</string></property>
+   <property name="toolTip"><string>打开本地视频文件 (Ctrl+O)</string></property>
+   <property name="shortcut"><string>Ctrl+O</string></property>
+  </action>
+  <action name="actionOpenScreen">
+   <property name="text"><string>屏幕捕获</string></property>
+   <property name="toolTip"><string>开始屏幕区域捕获 (Ctrl+G)</string></property>
+   <property name="shortcut"><string>Ctrl+G</string></property>
+  </action>
+  <action name="actionPlayPause">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>播放</string></property>
+   <property name="toolTip"><string>播放 / 暂停 (Space)</string></property>
+   <property name="shortcut"><string>Space</string></property>
+  </action>
+  <action name="actionStop">
+   <property name="text"><string>停止</string></property>
+   <property name="toolTip"><string>停止播放 (Ctrl+S)</string></property>
+   <property name="shortcut"><string>Ctrl+S</string></property>
+  </action>
+  <action name="actionScreenshot">
+   <property name="text"><string>截图</string></property>
+   <property name="toolTip"><string>保存当前帧 (Ctrl+P)</string></property>
+   <property name="shortcut"><string>Ctrl+P</string></property>
+  </action>
+  <action name="actionRecord">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="text"><string>录制</string></property>
+   <property name="toolTip"><string>开始 / 停止录制 (Ctrl+R)</string></property>
+   <property name="shortcut"><string>Ctrl+R</string></property>
+  </action>
+  <action name="actionExit">
+   <property name="text"><string>退出(&amp;Q)</string></property>
+   <property name="shortcut"><string>Ctrl+Q</string></property>
+  </action>
+  <action name="actionShowFilter">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="checked"><bool>true</bool></property>
+   <property name="text"><string>显示滤镜面板</string></property>
+  </action>
+  <action name="actionShowDetection">
+   <property name="checkable"><bool>true</bool></property>
+   <property name="checked"><bool>true</bool></property>
+   <property name="text"><string>显示检测面板</string></property>
+  </action>
+  <action name="actionAbout">
+   <property name="text"><string>关于...</string></property>
+  </action>
+
+ </widget><!-- end QMainWindow -->
  <resources/>
  <connections/>
 </ui>

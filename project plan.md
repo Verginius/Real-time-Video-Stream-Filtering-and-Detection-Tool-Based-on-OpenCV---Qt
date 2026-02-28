@@ -177,7 +177,7 @@ project-root/
 ├── project plan.md
 ├── README.md
 ├── docs/
-│   ├── plans/
+│   ├── design/
 │   └── assets/
 ├── src/
 │   ├── main.cpp
