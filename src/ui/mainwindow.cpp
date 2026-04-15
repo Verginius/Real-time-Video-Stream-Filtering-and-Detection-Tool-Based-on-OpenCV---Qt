@@ -1,5 +1,10 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "VideoDisplay.h"
+#include "../core/VideoController.h"
+#include <QThread>
+#include <QDebug>
+
 
 #include <QFileDialog>
 #include <QMessageBox>
@@ -13,6 +18,92 @@ MainWindow::MainWindow(QWidget *parent)
     setupStatusBar();
     updateAllParamLabels();
 
+    // 初始化控制器
+    m_controller = new VideoController();
+    m_controllerThread = new QThread(this);
+    m_controller->moveToThread(m_controllerThread);
+    
+    // 连接跨线程信号
+    connect(m_controllerThread, &QThread::finished, m_controller, &QObject::deleteLater);
+    
+    // Controller -> GUI
+    connect(m_controller, &VideoController::frameReady, this, &MainWindow::onFrameReady, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::fpsUpdated, this, &MainWindow::onFpsUpdated, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::resolutionChanged, this, &MainWindow::onResolutionChanged, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::sourceError, this, &MainWindow::onSourceError, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::recordingStateChanged, this, &MainWindow::onRecordingStateChanged, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::sourceOpened, this, &MainWindow::onSourceOpened, Qt::QueuedConnection);
+    connect(m_controller, &VideoController::sourceClosed, this, &MainWindow::onSourceClosed, Qt::QueuedConnection);
+    
+    // GUI -> Controller (基本控制)
+    connect(this, &MainWindow::openCameraRequested, m_controller, &VideoController::onOpenCamera, Qt::QueuedConnection);
+    connect(this, &MainWindow::openFileRequested, m_controller, &VideoController::onOpenFile, Qt::QueuedConnection);
+    connect(this, &MainWindow::openScreenRequested, m_controller, &VideoController::onOpenScreen, Qt::QueuedConnection);
+    connect(this, &MainWindow::playPauseRequested, m_controller, &VideoController::onPlayPause, Qt::QueuedConnection);
+    connect(this, &MainWindow::stopRequested, m_controller, &VideoController::onStop, Qt::QueuedConnection);
+    connect(this, &MainWindow::screenshotRequested, m_controller, &VideoController::onScreenshot, Qt::QueuedConnection);
+    connect(this, &MainWindow::recordToggleRequested, m_controller, &VideoController::onRecordToggle, Qt::QueuedConnection);
+    connect(this, &MainWindow::modelLoadRequested, m_controller, &VideoController::onLoadModel, Qt::QueuedConnection);
+    
+    // Filter toggle and parameter signals
+    connect(ui->chk_grayscale, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "grayscale"), Q_ARG(bool, b));
+    });
+    connect(ui->chk_gaussBlur, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "gaussian"), Q_ARG(bool, b));
+    });
+    connect(ui->sld_gaussKernel, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetGaussianParams", Qt::QueuedConnection, Q_ARG(int, v), Q_ARG(double, ui->sld_gaussSigma->value() / 10.0));
+    });
+    connect(ui->sld_gaussSigma, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetGaussianParams", Qt::QueuedConnection, Q_ARG(int, ui->sld_gaussKernel->value()), Q_ARG(double, v / 10.0));
+    });
+    
+    connect(ui->chk_canny, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "canny"), Q_ARG(bool, b));
+    });
+    connect(ui->sld_cannyThresh1, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetCannyParams", Qt::QueuedConnection, Q_ARG(double, v), Q_ARG(double, ui->sld_cannyThresh2->value()));
+    });
+    connect(ui->sld_cannyThresh2, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetCannyParams", Qt::QueuedConnection, Q_ARG(double, ui->sld_cannyThresh1->value()), Q_ARG(double, v));
+    });
+    
+    connect(ui->chk_threshold, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "threshold"), Q_ARG(bool, b));
+    });
+    connect(ui->cmb_threshType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetThresholdParams", Qt::QueuedConnection, Q_ARG(int, v), Q_ARG(int, ui->sld_threshValue->value()));
+    });
+    connect(ui->sld_threshValue, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetThresholdParams", Qt::QueuedConnection, Q_ARG(int, ui->cmb_threshType->currentIndex()), Q_ARG(int, v));
+    });
+    
+    connect(ui->chk_clahe, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetHistEqParams", Qt::QueuedConnection, Q_ARG(bool, b), Q_ARG(double, 40.0));
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "histeq"), Q_ARG(bool, b));
+    });
+    connect(ui->chk_sharpen, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "sharpen"), Q_ARG(bool, b));
+    });
+    connect(ui->chk_bgSub, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "bgsub"), Q_ARG(bool, b));
+    });
+    
+    // Detection signals
+    connect(ui->chk_detection, &QCheckBox::toggled, this, [this](bool b) {
+        QMetaObject::invokeMethod(m_controller, "onSetDetectionEnabled", Qt::QueuedConnection, Q_ARG(bool, b));
+    });
+    connect(ui->sld_confThresh, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetConfThreshold", Qt::QueuedConnection, Q_ARG(float, v / 100.0f));
+    });
+    connect(ui->sld_nmsThresh, &QSlider::valueChanged, this, [this](int v) {
+        QMetaObject::invokeMethod(m_controller, "onSetNmsThreshold", Qt::QueuedConnection, Q_ARG(float, v / 100.0f));
+    });
+    
+    m_controllerThread->start();
+
+
     // 参数面板默认禁用（随对应 checkbox 联动）
     ui->grp_gaussParams->setEnabled(false);
     ui->grp_cannyParams->setEnabled(false);
@@ -25,6 +116,11 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+
+    if (m_controllerThread) {
+        m_controllerThread->quit();
+        m_controllerThread->wait();
+    }
     delete ui;
 }
 
@@ -73,8 +169,7 @@ void MainWindow::updateAllParamLabels()
 
 void MainWindow::on_actionOpenCamera_triggered()
 {
-    // TODO: 枚举并打开摄像头
-    statusBar()->showMessage(QStringLiteral("打开摄像头 — 待实现"), 2000);
+    emit openCameraRequested(0);
 }
 
 void MainWindow::on_actionOpenFile_triggered()
@@ -90,36 +185,27 @@ void MainWindow::on_actionOpenFile_triggered()
 
 void MainWindow::on_actionOpenScreen_triggered()
 {
-    statusBar()->showMessage(QStringLiteral("屏幕捕获 — 待实现"), 2000);
+    emit openScreenRequested(QRect(), 30.0);
 }
 
 void MainWindow::on_actionPlayPause_triggered()
 {
-    m_isPlaying = ui->actionPlayPause->isChecked();
-    ui->actionPlayPause->setText(m_isPlaying ? QStringLiteral("暂停") : QStringLiteral("播放"));
-    statusBar()->showMessage(m_isPlaying ? QStringLiteral("播放中…") : QStringLiteral("已暂停"), 1500);
+    emit playPauseRequested();
 }
 
 void MainWindow::on_actionStop_triggered()
 {
-    m_isPlaying = false;
-    ui->actionPlayPause->setChecked(false);
-    ui->actionPlayPause->setText(QStringLiteral("播放"));
-    statusBar()->showMessage(QStringLiteral("已停止"), 1500);
+    emit stopRequested();
 }
 
 void MainWindow::on_actionScreenshot_triggered()
 {
-    // TODO: 将 lbl_processedVideo 的当前帧保存为图片
-    statusBar()->showMessage(QStringLiteral("截图已保存"), 2000);
+    emit screenshotRequested();
 }
 
 void MainWindow::on_actionRecord_triggered()
 {
-    m_isRecording = ui->actionRecord->isChecked();
-    ui->actionRecord->setText(m_isRecording ? QStringLiteral("停止录制") : QStringLiteral("录制"));
-    statusBar()->showMessage(
-        m_isRecording ? QStringLiteral("录制中…") : QStringLiteral("录制已停止"), 2000);
+    emit recordToggleRequested();
 }
 
 void MainWindow::on_actionExit_triggered()
@@ -147,46 +233,53 @@ void MainWindow::on_actionShowDetection_triggered(bool checked)
     ui->detScrollArea->setVisible(checked);
 }
 
-void MainWindow::on_chk_grayscale_toggled(bool /*checked*/)
+void MainWindow::on_chk_grayscale_toggled(bool checked)
 {
-    // TODO: 通知处理管线
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "grayscale"), Q_ARG(bool, checked));
 }
 
 void MainWindow::on_chk_gaussBlur_toggled(bool checked)
 {
     ui->grp_gaussParams->setEnabled(checked);
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "gaussian"), Q_ARG(bool, checked));
 }
 
 void MainWindow::on_sld_gaussKernel_valueChanged(int value)
 {
     ui->lbl_gaussKernelVal->setText(
         QStringLiteral("核大小: %1").arg(value * 2 + 1));
+    QMetaObject::invokeMethod(m_controller, "onSetGaussianParams", Qt::QueuedConnection, Q_ARG(int, value), Q_ARG(double, ui->sld_gaussSigma->value() / 10.0));
 }
 
 void MainWindow::on_sld_gaussSigma_valueChanged(int value)
 {
     ui->lbl_gaussSigmaVal->setText(
         QStringLiteral("Sigma: %1").arg(value / 10.0, 0, 'f', 1));
+    QMetaObject::invokeMethod(m_controller, "onSetGaussianParams", Qt::QueuedConnection, Q_ARG(int, ui->sld_gaussKernel->value()), Q_ARG(double, value / 10.0));
 }
 
 void MainWindow::on_chk_canny_toggled(bool checked)
 {
     ui->grp_cannyParams->setEnabled(checked);
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "canny"), Q_ARG(bool, checked));
 }
 
 void MainWindow::on_sld_cannyThresh1_valueChanged(int value)
 {
     ui->lbl_cannyThresh1Val->setText(QStringLiteral("阈值 1: %1").arg(value));
+    QMetaObject::invokeMethod(m_controller, "onSetCannyParams", Qt::QueuedConnection, Q_ARG(double, value), Q_ARG(double, ui->sld_cannyThresh2->value()));
 }
 
 void MainWindow::on_sld_cannyThresh2_valueChanged(int value)
 {
     ui->lbl_cannyThresh2Val->setText(QStringLiteral("阈值 2: %1").arg(value));
+    QMetaObject::invokeMethod(m_controller, "onSetCannyParams", Qt::QueuedConnection, Q_ARG(double, ui->sld_cannyThresh1->value()), Q_ARG(double, value));
 }
 
 void MainWindow::on_chk_threshold_toggled(bool checked)
 {
     ui->grp_threshParams->setEnabled(checked);
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "threshold"), Q_ARG(bool, checked));
 }
 
 void MainWindow::on_cmb_threshType_currentIndexChanged(int index)
@@ -195,31 +288,35 @@ void MainWindow::on_cmb_threshType_currentIndexChanged(int index)
     const bool needManual = (index != 2);
     ui->sld_threshValue->setEnabled(needManual);
     ui->lbl_threshValueVal->setEnabled(needManual);
+    QMetaObject::invokeMethod(m_controller, "onSetThresholdParams", Qt::QueuedConnection, Q_ARG(int, index), Q_ARG(int, ui->sld_threshValue->value()));
 }
 
 void MainWindow::on_sld_threshValue_valueChanged(int value)
 {
     ui->lbl_threshValueVal->setText(QStringLiteral("阈值: %1").arg(value));
+    QMetaObject::invokeMethod(m_controller, "onSetThresholdParams", Qt::QueuedConnection, Q_ARG(int, ui->cmb_threshType->currentIndex()), Q_ARG(int, value));
 }
 
-void MainWindow::on_chk_clahe_toggled(bool /*checked*/)
+void MainWindow::on_chk_clahe_toggled(bool checked)
 {
-    // TODO: 通知处理管线
+    QMetaObject::invokeMethod(m_controller, "onSetHistEqParams", Qt::QueuedConnection, Q_ARG(bool, checked), Q_ARG(double, 40.0));
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "histeq"), Q_ARG(bool, checked));
 }
 
-void MainWindow::on_chk_sharpen_toggled(bool /*checked*/)
+void MainWindow::on_chk_sharpen_toggled(bool checked)
 {
-    // TODO: 通知处理管线
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "sharpen"), Q_ARG(bool, checked));
 }
 
-void MainWindow::on_chk_bgSub_toggled(bool /*checked*/)
+void MainWindow::on_chk_bgSub_toggled(bool checked)
 {
-    // TODO: 通知处理管线
+    QMetaObject::invokeMethod(m_controller, "onSetFilterEnabled", Qt::QueuedConnection, Q_ARG(QString, "bgsub"), Q_ARG(bool, checked));
 }
 
 void MainWindow::on_chk_detection_toggled(bool checked)
 {
     ui->grp_detSettings->setEnabled(checked);
+    QMetaObject::invokeMethod(m_controller, "onSetDetectionEnabled", Qt::QueuedConnection, Q_ARG(bool, checked));
 }
 
 void MainWindow::on_btn_loadModel_clicked()
@@ -238,9 +335,70 @@ void MainWindow::on_btn_loadModel_clicked()
 void MainWindow::on_sld_confThresh_valueChanged(int value)
 {
     ui->lbl_confThreshVal->setText(QStringLiteral("置信度阈值: %1%").arg(value));
+    QMetaObject::invokeMethod(m_controller, "onSetConfThreshold", Qt::QueuedConnection, Q_ARG(float, value / 100.0f));
 }
 
 void MainWindow::on_sld_nmsThresh_valueChanged(int value)
 {
     ui->lbl_nmsThreshVal->setText(QStringLiteral("NMS 阈值: %1%").arg(value));
+    QMetaObject::invokeMethod(m_controller, "onSetNmsThreshold", Qt::QueuedConnection, Q_ARG(float, value / 100.0f));
+}
+
+void MainWindow::onFrameReady(const cv::Mat& original, const cv::Mat& processed, const DetectionList& detections)
+{
+    VideoDisplay::renderFrame(ui->lbl_originalVideo, original);
+    VideoDisplay::renderFrame(ui->lbl_processedVideo, processed);
+
+    ui->tbl_detectionResults->setRowCount(static_cast<int>(detections.size()));
+    for (int i = 0; i < static_cast<int>(detections.size()); ++i) {
+        const auto& d = detections[i];
+        ui->tbl_detectionResults->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(d.label)));
+        ui->tbl_detectionResults->setItem(i, 1, new QTableWidgetItem(QString::number(d.confidence, 'f', 2)));
+        ui->tbl_detectionResults->setItem(i, 2, new QTableWidgetItem(QString("(%1, %2)").arg(int(d.bbox.x)).arg(int(d.bbox.y))));
+        ui->tbl_detectionResults->setItem(i, 3, new QTableWidgetItem(QString("%1 x %2").arg(int(d.bbox.width)).arg(int(d.bbox.height))));
+    }
+
+    m_lblDetCount->setText(QString("检测数: %1").arg(detections.size()));
+}
+
+void MainWindow::onFpsUpdated(double fps)
+{
+    m_lblFps->setText(QString("FPS: %1").arg(fps, 0, 'f', 1));
+}
+
+void MainWindow::onResolutionChanged(int w, int h)
+{
+    m_lblResolution->setText(QString("分辨率: %1x%2").arg(w).arg(h));
+}
+
+void MainWindow::onSourceError(const QString& msg)
+{
+    QMessageBox::critical(this, "源错误", msg);
+    on_actionStop_triggered();
+}
+
+void MainWindow::onRecordingStateChanged(bool recording)
+{
+    m_isRecording = recording;
+    ui->actionRecord->setChecked(recording);
+    ui->actionRecord->setText(recording ? "停止录制" : "录制");
+    statusBar()->showMessage(recording ? "录制中..." : "录制已停止", 2000);
+}
+
+void MainWindow::onSourceOpened(const QString& desc)
+{
+    statusBar()->showMessage(QString("已打开: %1").arg(desc), 3000);
+    ui->actionPlayPause->setChecked(true);
+    ui->actionPlayPause->setText("暂停");
+    m_isPlaying = true;
+}
+
+void MainWindow::onSourceClosed()
+{
+    statusBar()->showMessage("源已关闭", 2000);
+    ui->lbl_originalVideo->clear();
+    ui->lbl_processedVideo->clear();
+    ui->lbl_originalVideo->setText("无信号");
+    ui->lbl_processedVideo->setText("无信号");
+    ui->tbl_detectionResults->setRowCount(0);
 }

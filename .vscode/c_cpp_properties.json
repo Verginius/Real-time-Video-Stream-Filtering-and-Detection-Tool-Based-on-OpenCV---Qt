@@ -2,12 +2,11 @@
     "configurations": [
         {
             "name": "Win32",
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compileCommands": "${workspaceFolder}/.vscode/compile_commands.json",
             "includePath": [
                 "${default}",
                 "${workspaceFolder}/src",
                 "${workspaceFolder}/src/ui",
-                "${workspaceFolder}/build/RVSFDT_autogen/include",
                 "${workspaceFolder}/libs/OpenCV-MinGW-Build-OpenCV-4.5.5-x64/include",
                 "D:/Qt/6.10.2/mingw_64/include",
                 "D:/Qt/6.10.2/mingw_64/include/QtCore",
@@ -21,8 +20,8 @@
             ],
             "compilerPath": "D:/Qt/Tools/mingw1310_64/bin/g++.exe",
             "windowsSdkVersion": "10.0.26100.0",
-            "cStandard": "c17",
-            "cppStandard": "c++17",
+            "cStandard": "c23",
+            "cppStandard": "c++23",
             "intelliSenseMode": "windows-gcc-x64"
         }
     ],

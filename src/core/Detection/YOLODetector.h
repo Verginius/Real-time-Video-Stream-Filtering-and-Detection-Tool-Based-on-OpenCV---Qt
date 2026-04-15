@@ -1,5 +1,5 @@
 #pragma once
-#include "DetectorBase.h"
+#include "DetectionBackend.h"
 #include "LabelMap.h"
 #include <opencv2/dnn.hpp>
 #include <mutex>
@@ -13,7 +13,7 @@ struct YOLOConfig {
     int    targetId     = cv::dnn::DNN_TARGET_CPU;      // CUDA=DNN_TARGET_CUDA
 };
 
-class YOLODetector : public DetectorBase {
+class YOLODetector : public DetectionBackend {
 public:
     explicit YOLODetector(YOLOConfig cfg = {});
 

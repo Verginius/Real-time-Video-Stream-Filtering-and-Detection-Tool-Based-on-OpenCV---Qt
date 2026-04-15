@@ -12,6 +12,7 @@ public:
     enum class Format { CSV, JSON };
     enum class ImageFormat { PNG, JPEG };
 
+    ResultExporter() = default;
     explicit ResultExporter(std::filesystem::path filePath, Format fmt);
     ~ResultExporter();   // 自动 flush + close
 

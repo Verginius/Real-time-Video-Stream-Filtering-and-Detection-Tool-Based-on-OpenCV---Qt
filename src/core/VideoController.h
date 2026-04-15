@@ -6,13 +6,16 @@
 #include <QRect>
 #include <memory>
 #include <atomic>
+#include <queue>
+#include <condition_variable>
 
-#include "VideoSource/VideoSource.h"   // VideoSource 纯虚基类
+#include "VideoSource/VideoSource.h"
 #include "Filter/FilterChain.h"
 #include "Detection/YOLODetector.h"
 #include "Detection/DetectionRenderer.h"
 #include "Export/VideoRecorder.h"
 #include "Export/ResultExporter.h"
+#include "Async/FramePipeline.h"
 
 class VideoController : public QObject {
     Q_OBJECT
@@ -87,6 +90,18 @@ private:
     DetectionRenderer            m_renderer;
     VideoRecorder                m_recorder;
     ResultExporter               m_exporter;
+
+    // ──── 异步处理管道 (可选) ────
+    std::unique_ptr<AsyncPipeline> m_asyncPipeline;
+    std::atomic<bool>            m_useAsyncPipeline{false};
+
+    // ──── 异步检测线程 (性能优化) ────
+    std::thread m_detectionThread;
+    std::atomic<bool> m_detectionRunning{false};
+    std::queue<cv::Mat> m_detectionQueue;
+    std::mutex m_detQueueMutex;
+    std::condition_variable m_detQueueCV;
+    void detectionWorker();
 
     // ──── 帧循环 ────
     QTimer*          m_frameTimer   = nullptr;

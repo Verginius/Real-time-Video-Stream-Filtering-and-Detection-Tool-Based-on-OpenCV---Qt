@@ -78,5 +78,6 @@ exports/
 tests/build/
 
 libs/
-
 docs/
+.cache/
+.config/

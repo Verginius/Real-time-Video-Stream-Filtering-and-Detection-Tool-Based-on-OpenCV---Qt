@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QLabel>
+#include <QThread>
+#include "../core/VideoController.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -17,6 +19,25 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+public slots:
+    void onFrameReady(const cv::Mat& original, const cv::Mat& processed, const DetectionList& detections);
+    void onFpsUpdated(double fps);
+    void onResolutionChanged(int w, int h);
+    void onSourceError(const QString& msg);
+    void onRecordingStateChanged(bool recording);
+    void onSourceOpened(const QString& desc);
+    void onSourceClosed();
+
+signals:
+    void openCameraRequested(int deviceIndex);
+    void openFileRequested(const QString& path);
+    void openScreenRequested(QRect region, double fps);
+    void playPauseRequested();
+    void stopRequested();
+    void screenshotRequested();
+    void recordToggleRequested();
+    void modelLoadRequested(const QString& modelPath, const QString& labelsPath);
 
 private slots:
     // ---- 输入源 ----
@@ -68,6 +89,8 @@ private:
 
     bool m_isPlaying   = false;
     bool m_isRecording = false;
+    VideoController *m_controller = nullptr;
+    QThread *m_controllerThread = nullptr;
 };
 
 #endif // MAINWINDOW_H

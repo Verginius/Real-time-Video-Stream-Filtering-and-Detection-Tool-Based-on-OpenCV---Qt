@@ -16,12 +16,13 @@ class DetectionRenderer {
 public:
     using Style = DetectionRenderStyle;
 
+    DetectionRenderer() = default;
     explicit DetectionRenderer(const LabelMap& labels, Style style = Style{});
 
     // 在 frame 上原地绘制所有检测框（frame 须为可写副本）
     void render(cv::Mat& frame, const DetectionList& detections) const;
 
 private:
-    const LabelMap& m_labels;
-    Style           m_style;
+    const LabelMap* m_labels = nullptr;
+    Style           m_style{};
 };

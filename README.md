@@ -9,18 +9,20 @@
 | 模块 | 主要功能 |
 |------|---------|
 | 视频输入 | 本地摄像头、视频文件（MP4/AVI/MKV）、屏幕录制流 |
-| 图像滤镜 | 灰度化、高斯模糊、Canny 边缘、二值化、CLAHE、锐化、形态学、背景差分等，支持滤镜链叠加 |
-| 目标检测 | YOLOv8 ONNX 实时推理，可视化 Bounding Box + 类别 + 置信度 |
+| 图像滤镜 | 灰度化、高斯模糊、Canny 边缘、二值化、CLAHE，支持滤镜链叠加，支持并行处理 |
+| 目标检测 | YOLOv8 ONNX 实时推理（CPU/OpenCV DNN 或 GPU/TensorRT），可视化 Bounding Box + 类别 + 置信度 |
 | 导出 | 截图（PNG/JPEG）、处理后视频录制（MP4/AVI）、检测结果 CSV/JSON |
+| 性能优化 | 异步检测管线，OpenCV 并行滤镜处理 |
 
 ---
 
 ## 技术栈
 
-- **语言**：C++17  
+- **语言**：C++20  
 - **UI 框架**：Qt 6.10.2  
 - **计算机视觉**：OpenCV 4.5.5（MinGW x64 预编译版）  
-- **深度学习推理**：OpenCV DNN / ONNX Runtime  
+- **GPU 加速**：CUDA 12.6 + cuDNN 9.2 + TensorRT 10.x
+- **深度学习推理**：OpenCV DNN / TensorRT GPU 推理
 - **目标检测模型**：YOLOv8 (Ultralytics ONNX 导出)  
 - **构建系统**：CMake 3.16+  
 - **测试框架**：Google Test  
@@ -37,7 +39,8 @@ project-root/
 │   └── toolchain-qt6-mingw64.cmake        # MinGW 工具链文件
 ├── docs/
 │   ├── design/                            # 各模块详细设计文档（DD-*.md）
-│   └── assets/                            # 架构图、类图等 Mermaid 图表
+│   ├── assets/                            # 架构图、类图等 Mermaid 图表
+│   └── SOURCE_CODE_EXPLANATION.md         # 源代码说明文档
 ├── libs/                                  # 第三方预编译库（不纳入版本控制，需手动放置）
 │   └── OpenCV-MinGW-Build-OpenCV-4.5.5-x64/
 │       ├── OpenCVConfig.cmake
@@ -54,7 +57,7 @@ project-root/
 │   │   │   └── ScreenSource.h/cpp         #   屏幕区域捕获
 │   │   ├── Filter/                        # 滤镜模块
 │   │   │   ├── FilterBase.h               #   抽象基类
-│   │   │   ├── FilterChain.h/cpp          #   滤镜链（顺序执行）
+│   │   │   ├── FilterChain.h/cpp          #   滤镜链（顺序执行 + 并行处理）
 │   │   │   ├── GrayscaleFilter.h/cpp      #   灰度化
 │   │   │   ├── GaussianFilter.h/cpp       #   高斯模糊
 │   │   │   ├── CannyFilter.h/cpp          #   Canny 边缘检测
@@ -63,22 +66,26 @@ project-root/
 │   │   ├── Detection/                     # 目标检测模块
 │   │   │   ├── Detection.h                #   Detection 结构体 + DetectionList typedef
 │   │   │   ├── DetectorBase.h             #   抽象基类
+│   │   │   ├── DetectionBackend.h/cpp     #   检测后端工厂（YOLO/TensorRT）
 │   │   │   ├── LabelMap.h                 #   类别 ID ↔ 名称 / 颜色映射
-│   │   │   ├── YOLODetector.h/cpp         #   YOLOv8 ONNX 推理实现
-│   │   │   └── DetectionRenderer.h/cpp    #   检测框可视化
-│   │   └── Export/                        # 录制与导出模块
+│   │   │   ├── YOLODetector.h/cpp         #   YOLOv8 ONNX 推理（OpenCV DNN）
+│   │   │   ├── TensorRTBackend.h/cpp      #   TensorRT GPU 加速推理
+│   │   │   └── DetectionRenderer.h/cpp   #   检测框可视化
+│   │   ├── Async/                         # 异步处理模块
+│   │   │   └── FramePipeline.h/cpp        #   异步帧处理管道
+│   │   └── Export/                       # 录制与导出模块
 │   │       ├── VideoRecorder.h/cpp        #   视频录制（独立 I/O 线程）
 │   │       └── ResultExporter.h/cpp       #   截图 + CSV/JSON 检测结果导出
 │   └── ui/
 │       ├── mainwindow.h/cpp/ui            # 主窗口
 │       ├── FilterPanel.h/cpp              # 左侧滤镜面板
-│       ├── DetectionPanel.h/cpp           # 右侧检测面板
+│       ├── DetectionPanel.h/cpp          # 右侧检测面板
 │       └── VideoDisplay.h/cpp             # cv::Mat → QLabel 渲染工具
-├── resources/                             # （规划中）
+├── resources/                            # 资源目录
 │   ├── models/                            #   ONNX 模型文件（不纳入版本控制）
 │   ├── labels/                            #   COCO 类别标签
 │   └── icons/
-└── tests/                                 # （规划中）
+└── tests/                                 # 测试目录（规划中）
     ├── test_filters.cpp
     ├── test_detector.cpp
     └── test_video_source.cpp
@@ -97,6 +104,8 @@ project-root/
 | Qt | 6.10.2 mingw_64 | [Qt 官方在线安装器](https://www.qt.io/download) |
 | MinGW | 13.1.0 64-bit | 随 Qt 安装器附带（`Tools/mingw1310_64`） |
 | OpenCV | 4.5.5 MinGW x64 预编译 | [OpenCV-MinGW-Build](https://github.com/huihut/OpenCV-MinGW-Build) 下载并解压到 `libs/` |
+| CUDA | 12.6 | [NVIDIA 官网](https://developer.nvidia.com/cuda-downloads)（可选，用于 GPU 加速） |
+| TensorRT | 10.x | [NVIDIA 官网](https://developer.nvidia.com/tensorrt)（可选，用于 GPU 加速） |
 | CMake | 3.16+ | [cmake.org](https://cmake.org/download/) 或随 Qt 安装 |
 
 > **重要**：`libs/` 目录已加入 `.gitignore`，克隆仓库后需手动将 OpenCV 预编译包放置到以下路径：
@@ -139,6 +148,7 @@ build\RVSFDT.exe
 | `settings.json` | 指定默认 Kit 与工具链文件 |
 | `tasks.json` | `cmake --build build` 构建任务 |
 | `launch.json` | GDB 调试配置（`RVSFDT.exe`） |
+| `compile_commands.json` | 编译命令数据库（用于 IntelliSense） |
 
 在状态栏选择 Kit **Qt 6.10.2 MinGW 13.1.0 64-bit** → 执行 **CMake: Configure** → **CMake: Build** 即可。
 
@@ -256,7 +266,7 @@ cmake --build build --parallel
 | 端到端延迟（输入→显示） | < 100 ms |
 | 视频显示帧率 | 30 FPS（1080p） |
 | YOLO 推理帧率（CPU，YOLOv8n） | ≥ 10 FPS |
-| YOLO 推理帧率（GPU，YOLOv8n） | ≥ 30 FPS |
+| YOLO 推理帧率（GPU，YOLOv8n） | ≥ 30 FPS（TensorRT 加速） |
 | 内存占用 | < 512 MB（不含模型） |
 
 ---

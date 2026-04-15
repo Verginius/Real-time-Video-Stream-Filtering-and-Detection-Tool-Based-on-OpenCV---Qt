@@ -1,13 +1,23 @@
 #include "GaussianFilter.h"
 #include <opencv2/imgproc.hpp>
+#include <algorithm>
 
-GaussianFilter::GaussianFilter(GaussianParams p)
-    : m_params(p)
-{}
+GaussianFilter::GaussianFilter(GaussianParams p) : m_params(p) {}
 
 void GaussianFilter::setParams(GaussianParams p)
 {
     std::lock_guard<std::mutex> lock(m_mu);
+    // Ensure kernel size is valid: odd and >= 1
+    if (p.kernelSize < 1) p.kernelSize = 1;
+    if (p.kernelSize % 2 == 0) p.kernelSize++;
+    
+    // clamp kernel size to avoid huge allocations/performance drops
+    p.kernelSize = std::min(p.kernelSize, 31);
+    
+    // Ensure sigmas are non-negative
+    if (p.sigmaX < 0) p.sigmaX = 0;
+    if (p.sigmaY < 0) p.sigmaY = 0;
+
     m_params = p;
 }
 
@@ -19,21 +29,16 @@ GaussianParams GaussianFilter::params() const
 
 cv::Mat GaussianFilter::apply(const cv::Mat& src)
 {
-    if (!m_enabled)
+    if (!m_enabled || src.empty())
         return src.clone();
 
-    GaussianParams p;
-    {
-        std::lock_guard<std::mutex> lock(m_mu);
-        p = m_params;
+    GaussianParams p = params();
+    
+    if (p.kernelSize <= 1 && p.sigmaX <= 0) {
+        return src.clone();
     }
 
-    // 强制奇数化
-    int k = p.kernelSize;
-    if (k % 2 == 0) k++;
-    if (k < 1) k = 1;
-
     cv::Mat dst;
-    cv::GaussianBlur(src, dst, cv::Size(k, k), p.sigmaX, p.sigmaY);
+    cv::GaussianBlur(src, dst, cv::Size(p.kernelSize, p.kernelSize), p.sigmaX, p.sigmaY);
     return dst;
 }
