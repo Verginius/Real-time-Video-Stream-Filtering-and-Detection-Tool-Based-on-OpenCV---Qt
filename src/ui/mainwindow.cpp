@@ -19,9 +19,9 @@ MainWindow::MainWindow(QWidget *parent)
     updateAllParamLabels();
 
     // 初始化控制器
-    m_controller = new VideoController();
-    m_controllerThread = new QThread(this);
-    m_controller->moveToThread(m_controllerThread);
+    m_controller = new VideoController();    
+    m_controllerThread = m_controller->moveToWorkerThread();
+    //m_controller->moveToThread(m_controllerThread);
     
     // 连接跨线程信号
     connect(m_controllerThread, &QThread::finished, m_controller, &QObject::deleteLater);
@@ -101,7 +101,7 @@ MainWindow::MainWindow(QWidget *parent)
         QMetaObject::invokeMethod(m_controller, "onSetNmsThreshold", Qt::QueuedConnection, Q_ARG(float, v / 100.0f));
     });
     
-    m_controllerThread->start();
+    //m_controllerThread->start();
 
 
     // 参数面板默认禁用（随对应 checkbox 联动）
@@ -180,7 +180,11 @@ void MainWindow::on_actionOpenFile_triggered()
         {},
         QStringLiteral("视频文件 (*.mp4 *.avi *.mkv *.mov);;所有文件 (*.*)"));
     if (!path.isEmpty())
+    {
         statusBar()->showMessage(QStringLiteral("已打开: ") + path, 3000);
+        emit openFileRequested(path);
+    }
+        
 }
 
 void MainWindow::on_actionOpenScreen_triggered()

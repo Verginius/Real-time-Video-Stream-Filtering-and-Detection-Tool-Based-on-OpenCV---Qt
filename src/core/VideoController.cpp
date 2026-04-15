@@ -32,13 +32,14 @@ VideoController::~VideoController() {
     }
 }
 
-void VideoController::moveToWorkerThread() {
+QThread* VideoController::moveToWorkerThread() {
     m_workerThread = new QThread(this);
     this->moveToThread(m_workerThread);
     
     // Timer will be created and started in the worker thread
     
     m_workerThread->start();
+    return m_workerThread;
 }
 
 void VideoController::onOpenCamera(int deviceIndex) {

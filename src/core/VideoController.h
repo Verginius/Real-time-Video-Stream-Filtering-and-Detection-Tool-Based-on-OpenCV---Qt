@@ -25,7 +25,7 @@ public:
     ~VideoController();
 
     // 在 QThread 中启动（由 MainWindow 调用）
-    void moveToWorkerThread();
+    QThread* moveToWorkerThread();
 
 signals:
     // ──── 向 GUI 回传数据 ────
